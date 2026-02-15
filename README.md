@@ -41,7 +41,8 @@ Depois disso, o botao de envio no `#admin` chama essa funcao e dispara para o Te
 ## Migracao de propriedade (Vercel + Supabase proprio)
 
 1. Criar um novo projeto Supabase na sua conta.
-2. Rodar o SQL/schema da tabela `questions` no novo projeto.
+2. Rodar o SQL/schema da tabela `questions` no novo projeto:
+   `supabase/migrations/20260215124500_create_questions_table.sql`
 3. Importar backup local:
    `SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/import-questions.mjs`
 4. Ajustar `.env.local` com o novo `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
