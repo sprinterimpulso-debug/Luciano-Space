@@ -166,6 +166,15 @@ export const AdminPanel: React.FC = () => {
     ));
   };
 
+  const handleCardClickSelect = (event: React.MouseEvent<HTMLDivElement>, questionId: number) => {
+    if (editingId === questionId) return;
+
+    const target = event.target as HTMLElement;
+    if (target.closest('[data-no-select-toggle="true"]')) return;
+
+    toggleSelected(questionId);
+  };
+
   const sendSelectedToTelegram = async () => {
     if (selectedQuestions.length === 0) {
       alert('Selecione ao menos uma pergunta para enviar.');
@@ -273,15 +282,19 @@ export const AdminPanel: React.FC = () => {
                   type="checkbox"
                   checked={selectedSet.has(q.id)}
                   onChange={() => toggleSelected(q.id)}
+                  data-no-select-toggle="true"
                   aria-label={`Selecionar pergunta ${q.id}`}
                   className="h-5 w-5 accent-emerald-600 rounded border-slate-300"
                 />
               </label>
 
               <div 
+                onClick={(event) => handleCardClickSelect(event, q.id)}
                 className={`flex-1 bg-white rounded-xl shadow-sm border overflow-hidden transition-all ${
                   editingId === q.id ? 'ring-2 ring-indigo-500 border-indigo-500' : 'border-slate-200'
-                } ${selectedSet.has(q.id) ? 'ring-2 ring-emerald-500 border-emerald-500' : ''}`}
+                } ${selectedSet.has(q.id) ? 'ring-2 ring-emerald-500 border-emerald-500' : ''} ${
+                  editingId === q.id ? '' : 'cursor-pointer'
+                }`}
               >
                 {/* Card Header (Always visible) */}
                 <div className="p-4 bg-slate-50 flex justify-between items-start border-b border-slate-100">
@@ -306,6 +319,7 @@ export const AdminPanel: React.FC = () => {
                        </span>
                        <button 
                          onClick={() => handleEdit(q)}
+                         data-no-select-toggle="true"
                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded transition-colors"
                        >
                          Editar
@@ -316,7 +330,7 @@ export const AdminPanel: React.FC = () => {
 
                 {/* Edit Mode */}
                 {editingId === q.id && (
-                  <div className="p-4 bg-indigo-50/50 animate-fade-in">
+                  <div className="p-4 bg-indigo-50/50 animate-fade-in" data-no-select-toggle="true">
                     <div className="grid gap-4">
                       
                       {/* Status Selector */}
