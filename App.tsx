@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { Question, QuestionStatus } from './types';
 import { QuestionCard } from './components/QuestionCard';
@@ -23,6 +23,7 @@ export default function App() {
   const [visibleCount, setVisibleCount] = useState(QUESTIONS_PAGE_SIZE);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   // Check URL hash for simple routing
   useEffect(() => {
@@ -140,6 +141,23 @@ export default function App() {
   );
 
   const hasMoreQuestions = visibleCount < processedQuestions.length;
+
+  useEffect(() => {
+    if (!hasMoreQuestions) return;
+    if (!loadMoreRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) return;
+        setVisibleCount((prev) => Math.min(prev + QUESTIONS_PAGE_SIZE, processedQuestions.length));
+      },
+      { rootMargin: '300px 0px' }
+    );
+
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasMoreQuestions, processedQuestions.length]);
 
   // --- ADMIN ROUTING ---
   if (isAdminRoute) {
@@ -312,16 +330,10 @@ export default function App() {
             ))}
 
             {hasMoreQuestions && (
-              <div className="pt-3 flex flex-col items-center gap-3">
+              <div ref={loadMoreRef} className="pt-3 flex flex-col items-center gap-3">
                 <p className="text-xs text-slate-500">
-                  Exibindo {visibleQuestions.length} de {processedQuestions.length} perguntas
+                  Exibindo {visibleQuestions.length} de {processedQuestions.length} perguntas. Carregando mais...
                 </p>
-                <button
-                  onClick={() => setVisibleCount((prev) => prev + QUESTIONS_PAGE_SIZE)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold transition-colors"
-                >
-                  Carregar mais 10
-                </button>
               </div>
             )}
           </div>

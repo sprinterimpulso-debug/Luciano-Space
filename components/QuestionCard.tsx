@@ -66,6 +66,10 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
   };
 
   const styles = getStyles();
+  const openPremiumAccessModal = () => {
+    setPremiumAccessError('');
+    setIsPremiumAccessModalOpen(true);
+  };
 
   const requestPremiumAccess = async () => {
     const email = premiumEmail.trim().toLowerCase();
@@ -82,6 +86,9 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
         body: {
           action: 'CHECK_PREMIUM_ACCESS',
           email,
+          questionId: id,
+          questionStatus: status,
+          questionAuthor: author || 'Anônimo',
         },
       });
 
@@ -166,7 +173,12 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
             </div>
 
             {videoId ? (
-              <div className="relative w-full pt-[56.25%] rounded-xl overflow-hidden bg-black shadow-md ring-1 ring-black/10 mb-3">
+              <button
+                type="button"
+                onClick={openPremiumAccessModal}
+                className="relative w-full pt-[56.25%] rounded-xl overflow-hidden bg-black shadow-md ring-1 ring-black/10 mb-3 block cursor-pointer"
+                aria-label="Desbloquear resposta deste vídeo"
+              >
                 <img
                   src={videoThumbnailUrl || ''}
                   alt="Preview do vídeo exclusivo"
@@ -175,16 +187,13 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
                   className="absolute top-0 left-0 w-full h-full object-cover blur-sm scale-105 opacity-90"
                 />
                 <div className="absolute inset-0 bg-black/35" />
-              </div>
+              </button>
             ) : (
               <p className="text-sm text-slate-700 mb-3">A resposta em video sera publicada em breve.</p>
             )}
 
             <button
-              onClick={() => {
-                setPremiumAccessError('');
-                setIsPremiumAccessModalOpen(true);
-              }}
+              onClick={openPremiumAccessModal}
               className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white px-5 py-2.5 rounded-full shadow-lg shadow-amber-500/30 flex items-center gap-2 text-sm font-bold transition-all border border-white/20"
             >
               <Sparkles className="w-4 h-4" />

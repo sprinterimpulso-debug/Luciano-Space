@@ -22,6 +22,9 @@ type IncomingPayload = {
 type PremiumCheckPayload = {
   action: 'CHECK_PREMIUM_ACCESS';
   email: string;
+  questionId?: number;
+  questionStatus?: string;
+  questionAuthor?: string;
 };
 
 type TelegramMessage = {
@@ -30,6 +33,7 @@ type TelegramMessage = {
 };
 
 type TelegramUpdate = {
+  update_id?: number;
   message?: TelegramMessage;
 };
 
@@ -63,6 +67,7 @@ type BotRoutingConfig = {
   deaBotToken: string;
   deaGroupChatId: string;
   deaCarlaChatId: string;
+  deaBroadcastEnabled: boolean;
   platformUrl: string;
 };
 
@@ -164,6 +169,7 @@ const getBotRoutingConfig = (): BotRoutingConfig => {
     deaBotToken: Deno.env.get('TELEGRAM_DEA_BOT_TOKEN') || '',
     deaGroupChatId: Deno.env.get('TELEGRAM_DEA_GROUP_CHAT_ID') || '',
     deaCarlaChatId: Deno.env.get('TELEGRAM_DEA_CARLA_CHAT_ID') || '',
+    deaBroadcastEnabled: (Deno.env.get('DEA_BROADCAST_ENABLED') || 'false').toLowerCase() === 'true',
     platformUrl: Deno.env.get('TELEGRAM_PLATFORM_URL') || 'https://lucianocesa.com.br/space',
   };
 };
@@ -215,6 +221,8 @@ const ensureBucket = async (supabaseAdmin: ReturnType<typeof createAdminClient>)
 };
 
 const batchPath = (lotCode: string): string => `by-lot/${lotCode.toUpperCase()}.json`;
+const processedUpdatePath = (updateId: number): string => `processed-updates/${updateId}.txt`;
+const premiumLeadPath = (isoDate: string, recordId: string): string => `premium-leads/${isoDate}/${recordId}.json`;
 
 const saveBatch = async (supabaseAdmin: ReturnType<typeof createAdminClient>, batch: BatchMeta): Promise<void> => {
   await ensureBucket(supabaseAdmin);
@@ -250,6 +258,85 @@ const listAllBatches = async (supabaseAdmin: ReturnType<typeof createAdminClient
     if (batch) batches.push(batch);
   }
   return batches;
+};
+
+const markTelegramUpdateProcessed = async (
+  supabaseAdmin: ReturnType<typeof createAdminClient>,
+  updateId: number,
+): Promise<boolean> => {
+  await ensureBucket(supabaseAdmin);
+  const payload = new Blob([new Date().toISOString()], { type: 'text/plain' });
+  const { error } = await supabaseAdmin.storage.from(BATCH_BUCKET).upload(processedUpdatePath(updateId), payload, {
+    contentType: 'text/plain',
+    upsert: false,
+  });
+
+  if (!error) return true;
+
+  const msg = error.message.toLowerCase();
+  if (msg.includes('already exists') || msg.includes('duplicate')) {
+    return false;
+  }
+
+  throw error;
+};
+
+type LeadProfile = {
+  name: string | null;
+  telegramId: string | null;
+  telegramUsername: string | null;
+  phone: string | null;
+  memberStatus: string | null;
+};
+
+const parseLeadProfile = (data: Record<string, unknown> | null | undefined): LeadProfile => ({
+  name: typeof data?.name === 'string' ? data.name : null,
+  telegramId: typeof data?.telegram_id === 'string'
+      ? data.telegram_id
+      : typeof data?.telegramId === 'string'
+      ? data.telegramId
+      : null,
+  telegramUsername: typeof data?.telegram_username === 'string'
+      ? data.telegram_username
+      : typeof data?.telegramUsername === 'string'
+      ? data.telegramUsername
+      : null,
+  phone: typeof data?.phone === 'string' ? data.phone : null,
+  memberStatus: typeof data?.status === 'string'
+      ? data.status
+      : typeof data?.member_status === 'string'
+      ? data.member_status
+      : null,
+});
+
+const persistPremiumLead = async (
+  supabaseAdmin: ReturnType<typeof createAdminClient>,
+  record: Record<string, unknown>,
+): Promise<void> => {
+  const timestamp = new Date();
+  const dateKey = timestamp.toISOString().slice(0, 10);
+  const recordId = `${timestamp.getTime()}-${Math.random().toString(36).slice(2, 8)}`;
+  await ensureBucket(supabaseAdmin);
+  const payload = new Blob([JSON.stringify(record)], { type: 'application/json' });
+  await supabaseAdmin.storage.from(BATCH_BUCKET).upload(premiumLeadPath(dateKey, recordId), payload, {
+    contentType: 'application/json',
+    upsert: false,
+  });
+};
+
+const pushPremiumLeadToSheetWebhook = async (record: Record<string, unknown>): Promise<void> => {
+  const webhookUrl = Deno.env.get('PREMIUM_LEADS_WEBHOOK_URL') || '';
+  if (!webhookUrl) return;
+
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record),
+    });
+  } catch (error) {
+    console.error('Erro ao enviar lead para webhook da planilha:', error);
+  }
 };
 
 const getLatestBatch = (batches: BatchMeta[], predicate: (batch: BatchMeta) => boolean): BatchMeta | null => {
@@ -318,7 +405,7 @@ const undoBatch = async (
 };
 
 const notifyDespertosGroup = async (routing: BotRoutingConfig, youtubeUrl: string): Promise<void> => {
-  if (!routing.deaBotToken) return;
+  if (!routing.deaBroadcastEnabled || !routing.deaBotToken) return;
 
   const groupText = [
     'Despertos da Era de Aquario ✨',
@@ -442,36 +529,91 @@ const handleAdminDispatch = async (
 
 const isValidEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
-const checkDespertosAccess = async (payload: PremiumCheckPayload) => {
+const checkDespertosAccess = async (
+  payload: PremiumCheckPayload,
+  supabaseAdmin: ReturnType<typeof createAdminClient>,
+  req: Request,
+) => {
   const email = payload.email.trim().toLowerCase();
   if (!isValidEmail(email)) {
     return jsonResponse(400, { ok: false, error: 'Email invalido' });
   }
 
+  let allowed = false;
+  let source = 'env_list';
+  let profile: LeadProfile = {
+    name: null,
+    telegramId: null,
+    telegramUsername: null,
+    phone: null,
+    memberStatus: null,
+  };
+
   const allowAll = (Deno.env.get('DESPERTOS_ALLOW_ALL') || '').toLowerCase() === 'true';
   if (allowAll) {
-    return jsonResponse(200, { ok: true, allowed: true, source: 'allow_all' });
-  }
-
-  const webhook = Deno.env.get('DESPERTOS_VALIDATION_WEBHOOK_URL') || '';
-  if (webhook) {
-    try {
-      const response = await fetch(webhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await response.json();
-      const allowed = Boolean(data?.active);
-      return jsonResponse(200, { ok: true, allowed, source: 'webhook' });
-    } catch {
-      return jsonResponse(200, { ok: true, allowed: false, source: 'webhook_error' });
+    allowed = true;
+    source = 'allow_all';
+  } else {
+    const webhook = Deno.env.get('DESPERTOS_VALIDATION_WEBHOOK_URL') || '';
+    if (webhook) {
+      try {
+        const response = await fetch(webhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const data = await response.json();
+        allowed = Boolean(data?.active);
+        source = 'webhook';
+        profile = parseLeadProfile(data);
+      } catch {
+        allowed = false;
+        source = 'webhook_error';
+      }
+    } else {
+      const allowedEmails = parseChatIdList(Deno.env.get('DESPERTOS_ACTIVE_EMAILS')).map((item) => item.toLowerCase());
+      allowed = allowedEmails.includes(email);
+      source = 'env_list';
     }
   }
 
-  const allowedEmails = parseChatIdList(Deno.env.get('DESPERTOS_ACTIVE_EMAILS')).map((item) => item.toLowerCase());
-  const allowed = allowedEmails.includes(email);
-  return jsonResponse(200, { ok: true, allowed, source: 'env_list' });
+  const leadRecord: Record<string, unknown> = {
+    createdAt: new Date().toISOString(),
+    email,
+    allowed,
+    source,
+    questionId: payload.questionId ?? null,
+    questionStatus: payload.questionStatus ?? null,
+    questionAuthor: payload.questionAuthor ?? null,
+    name: profile.name,
+    telegramId: profile.telegramId,
+    telegramUsername: profile.telegramUsername,
+    phone: profile.phone,
+    memberStatus: profile.memberStatus ?? (allowed ? 'ativo' : 'inativo'),
+    userAgent: req.headers.get('user-agent') || null,
+    ip: req.headers.get('x-forwarded-for') || null,
+  };
+
+  try {
+    await persistPremiumLead(supabaseAdmin, leadRecord);
+    await pushPremiumLeadToSheetWebhook(leadRecord);
+  } catch (error) {
+    console.error('Erro ao registrar lead de acesso premium:', error);
+  }
+
+  return jsonResponse(200, {
+    ok: true,
+    allowed,
+    source,
+    leadRecorded: true,
+    profile: {
+      name: profile.name,
+      telegramId: profile.telegramId,
+      telegramUsername: profile.telegramUsername,
+      phone: profile.phone,
+      memberStatus: profile.memberStatus,
+    },
+  });
 };
 
 const helpText = [
@@ -495,6 +637,13 @@ const handleTelegramUpdate = async (
 
   if (!chatId || !text) return jsonResponse(200, { ok: true, ignored: true });
   if (!routing.operatorChatIds.includes(chatId)) return jsonResponse(200, { ok: true, ignored: true });
+
+  if (typeof update.update_id === 'number') {
+    const firstProcess = await markTelegramUpdateProcessed(supabaseAdmin, update.update_id);
+    if (!firstProcess) {
+      return jsonResponse(200, { ok: true, duplicate: true, ignored: true });
+    }
+  }
 
   const allBatches = await listAllBatches(supabaseAdmin);
 
@@ -619,7 +768,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
 
     if (body?.action === 'CHECK_PREMIUM_ACCESS') {
-      return await checkDespertosAccess(body as PremiumCheckPayload);
+      return await checkDespertosAccess(body as PremiumCheckPayload, supabaseAdmin, req);
     }
 
     if (body?.message?.chat?.id) {
