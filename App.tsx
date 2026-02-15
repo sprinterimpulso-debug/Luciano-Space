@@ -9,6 +9,7 @@ import { Filter, ArrowUpDown, CheckCircle2, Sparkles, Clock, Layers, Loader2, St
 
 type SortOption = 'NEWEST' | 'OLDEST';
 type FilterOption = 'ALL' | QuestionStatus;
+const QUESTIONS_PAGE_SIZE = 10;
 
 export default function App() {
   // Routing State
@@ -19,6 +20,7 @@ export default function App() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [statusFilter, setStatusFilter] = useState<FilterOption>('ALL');
   const [sortOrder, setSortOrder] = useState<SortOption>('NEWEST');
+  const [visibleCount, setVisibleCount] = useState(QUESTIONS_PAGE_SIZE);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -127,6 +129,17 @@ export default function App() {
 
     return result;
   }, [questions, statusFilter, sortOrder]);
+
+  useEffect(() => {
+    setVisibleCount(QUESTIONS_PAGE_SIZE);
+  }, [statusFilter, sortOrder, questions.length]);
+
+  const visibleQuestions = useMemo(
+    () => processedQuestions.slice(0, visibleCount),
+    [processedQuestions, visibleCount]
+  );
+
+  const hasMoreQuestions = visibleCount < processedQuestions.length;
 
   // --- ADMIN ROUTING ---
   if (isAdminRoute) {
@@ -294,9 +307,23 @@ export default function App() {
           </div>
         ) : (
           <div className="space-y-4">
-            {processedQuestions.map((question) => (
+            {visibleQuestions.map((question) => (
               <QuestionCard key={question.id} question={question} />
             ))}
+
+            {hasMoreQuestions && (
+              <div className="pt-3 flex flex-col items-center gap-3">
+                <p className="text-xs text-slate-500">
+                  Exibindo {visibleQuestions.length} de {processedQuestions.length} perguntas
+                </p>
+                <button
+                  onClick={() => setVisibleCount((prev) => prev + QUESTIONS_PAGE_SIZE)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold transition-colors"
+                >
+                  Carregar mais 10
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>

@@ -24,6 +24,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
   };
 
   const videoId = videoUrl ? getYoutubeId(videoUrl) : null;
+  const videoThumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
 
   const getStyles = () => {
     switch (status) {
@@ -108,7 +109,10 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
   };
 
   return (
-    <div className={`w-full rounded-2xl p-5 mb-4 ${styles.card} ${styles.cursor} animate-fade-in-up`}>
+    <div
+      className={`w-full rounded-2xl p-5 mb-4 ${styles.card} ${styles.cursor} animate-fade-in-up`}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '320px' }}
+    >
       <div className="flex justify-between items-start mb-3">
         <div className="flex items-center gap-3">
           <div className="bg-slate-50 p-2 rounded-full border border-slate-100 shadow-sm">
@@ -163,14 +167,14 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
 
             {videoId ? (
               <div className="relative w-full pt-[56.25%] rounded-xl overflow-hidden bg-black shadow-md ring-1 ring-black/10 mb-3">
-                <iframe
-                  src={`https://www.youtube.com/embed/${videoId}`}
-                  title="Preview Despertos"
-                  className="absolute top-0 left-0 w-full h-full border-0 pointer-events-none"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
+                <img
+                  src={videoThumbnailUrl || ''}
+                  alt="Preview do vídeo exclusivo"
+                  loading="lazy"
+                  decoding="async"
+                  className="absolute top-0 left-0 w-full h-full object-cover blur-sm scale-105 opacity-90"
                 />
-                <div className="absolute inset-0 backdrop-blur-md bg-black/35" />
+                <div className="absolute inset-0 bg-black/35" />
               </div>
             ) : (
               <p className="text-sm text-slate-700 mb-3">A resposta em video sera publicada em breve.</p>
@@ -215,6 +219,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
                   <iframe
                     src={`https://www.youtube.com/embed/${videoId}`}
                     title="Resposta em video"
+                    loading="lazy"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                     className="w-full h-full border-0"
