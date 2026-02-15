@@ -184,11 +184,12 @@ export const AdminPanel: React.FC = () => {
     const dateLabel = new Date().toLocaleDateString('pt-BR');
     const headerLines = [
       `Data: ${dateLabel}`,
-      `Seleção: ${selectionLabel}`,
+      `Destino: ${selectionLabel}`,
       `Total de perguntas: ${selectedQuestions.length}`,
       '',
       'Perguntas selecionadas:'
     ];
+    const headerText = headerLines.join('\n');
     const questionLines = selectedQuestions.map((question, index) => {
       const author = question.author?.trim() || 'Anônimo';
       const normalizedText = question.text.replace(/\s+/g, ' ').trim();
@@ -196,22 +197,32 @@ export const AdminPanel: React.FC = () => {
     });
 
     const messages: string[] = [];
-    let currentMessage = headerLines.join('\n');
+    let currentBody = '';
     const maxMessageLength = 3800;
 
     for (const line of questionLines) {
-      const candidate = `${currentMessage}\n${line}`;
+      const candidateBody = currentBody ? `${currentBody}\n${line}` : line;
+      const candidate = `${headerText}\n${candidateBody}`;
       if (candidate.length <= maxMessageLength) {
-        currentMessage = candidate;
+        currentBody = candidateBody;
         continue;
       }
 
-      messages.push(currentMessage);
-      currentMessage = line;
+      if (currentBody) {
+        messages.push(`${headerText}\n${currentBody}`);
+      }
+
+      if (`${headerText}\n${line}`.length > maxMessageLength) {
+        messages.push(`${headerText}\n${line.slice(0, maxMessageLength - headerText.length - 1)}`);
+        currentBody = '';
+        continue;
+      }
+
+      currentBody = line;
     }
 
-    if (currentMessage) {
-      messages.push(currentMessage);
+    if (currentBody) {
+      messages.push(`${headerText}\n${currentBody}`);
     }
 
     setIsSendingToTelegram(true);
