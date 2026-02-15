@@ -395,7 +395,6 @@ const handleAdminDispatch = async (
   const headerLines = [
     `Data: ${dateLabel}`,
     `Destino: ${destinationLabel}`,
-    `LOTE_ID: ${lotCode}`,
     `Total de perguntas: ${batchItems.length}`,
     '',
     'Perguntas selecionadas:',
@@ -405,7 +404,7 @@ const handleAdminDispatch = async (
   const lines = batchItems.map((question, index) => normalizeQuestionLine(question, index));
   const messages = splitMessages(headerText, lines);
 
-  const instruction = `\n\nPara vincular o video deste lote:\n- envie apenas o link do YouTube\n- ou use: /vincular ${lotCode} <link>\nCorrecao: /desfazer ultimo`;
+  const instruction = '\n\nEnvie somente o link do YouTube referente a este lote.';
 
   for (let i = 0; i < messages.length; i++) {
     const suffix = i === messages.length - 1 ? instruction : '';
