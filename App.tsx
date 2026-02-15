@@ -7,7 +7,7 @@ import { AdminLogin } from './components/AdminLogin';
 import { AdminPanel } from './components/AdminPanel';
 import { Filter, ArrowUpDown, CheckCircle2, Sparkles, Clock, Layers, Loader2, Stars } from 'lucide-react';
 
-type SortOption = 'NEWEST' | 'OLDEST' | 'STATUS';
+type SortOption = 'NEWEST' | 'OLDEST';
 type FilterOption = 'ALL' | QuestionStatus;
 
 export default function App() {
@@ -122,16 +122,6 @@ export default function App() {
       if (sortOrder === 'OLDEST') {
         return a.timestamp.getTime() - b.timestamp.getTime();
       }
-      if (sortOrder === 'STATUS') {
-        const weight = {
-          [QuestionStatus.ANSWERED]: 3,
-          [QuestionStatus.PREMIUM]: 2,
-          [QuestionStatus.PENDING]: 1,
-        };
-        const weightDiff = weight[b.status] - weight[a.status];
-        if (weightDiff !== 0) return weightDiff;
-        return b.timestamp.getTime() - a.timestamp.getTime();
-      }
       return 0;
     });
 
@@ -233,7 +223,6 @@ export default function App() {
                   >
                     <option value="NEWEST">Mais recentes</option>
                     <option value="OLDEST">Mais antigas</option>
-                    <option value="STATUS">Por Prioridade</option>
                   </select>
                   <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 transform -translate-y-1/2 pointer-events-none group-hover:text-indigo-500 transition-colors" />
                </div>
