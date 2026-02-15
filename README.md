@@ -18,3 +18,22 @@ View your app in AI Studio: https://ai.studio/apps/drive/15lKMAjKSVxDWxOWuBLY8D3
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Telegram (Admin) via Supabase Edge Function
+
+Para manter o token do bot fora do frontend, o envio de perguntas selecionadas no admin usa a funcao:
+
+- `supabase/functions/send-selected-questions-telegram/index.ts`
+
+### Setup (uma vez por projeto Supabase)
+
+1. Fazer login na CLI:
+   `supabase login`
+2. Linkar o projeto:
+   `supabase link --project-ref lvxbqwqpehpupsgfpcoe`
+3. Definir secrets da funcao (nao versionar token):
+   `supabase secrets set TELEGRAM_BOT_TOKEN=seu_token TELEGRAM_CHAT_ID=seu_chat_id`
+4. Deploy da funcao:
+   `supabase functions deploy send-selected-questions-telegram`
+
+Depois disso, o botao de envio no `#admin` chama essa funcao e dispara para o Telegram.

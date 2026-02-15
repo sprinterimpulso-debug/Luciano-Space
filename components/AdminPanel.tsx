@@ -8,9 +8,6 @@ import {
 const SELECTED_QUESTIONS_KEY = 'admin_selected_questions';
 const SELECTION_TARGET_KEY = 'admin_selection_target';
 
-const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID;
-
 type SelectionTarget = 'LIVE_GRATUITA' | 'DESPERTOS';
 
 const getSelectionTargetLabel = (target: SelectionTarget): string =>
@@ -175,76 +172,26 @@ export const AdminPanel: React.FC = () => {
       return;
     }
 
-    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-      alert('Configuração do Telegram ausente. Defina VITE_TELEGRAM_BOT_TOKEN e VITE_TELEGRAM_CHAT_ID.');
-      return;
-    }
-
-    const selectionLabel = getSelectionTargetLabel(selectionTarget);
-    const dateLabel = new Date().toLocaleDateString('pt-BR');
-    const headerLines = [
-      `Data: ${dateLabel}`,
-      `Destino: ${selectionLabel}`,
-      `Total de perguntas: ${selectedQuestions.length}`,
-      '',
-      'Perguntas selecionadas:'
-    ];
-    const headerText = headerLines.join('\n');
-    const questionLines = selectedQuestions.map((question, index) => {
-      const author = question.author?.trim() || 'Anônimo';
-      const normalizedText = question.text.replace(/\s+/g, ' ').trim();
-      return `${index + 1}. [#${question.id}] ${author}: ${normalizedText}`;
-    });
-
-    const messages: string[] = [];
-    let currentBody = '';
-    const maxMessageLength = 3800;
-
-    for (const line of questionLines) {
-      const candidateBody = currentBody ? `${currentBody}\n${line}` : line;
-      const candidate = `${headerText}\n${candidateBody}`;
-      if (candidate.length <= maxMessageLength) {
-        currentBody = candidateBody;
-        continue;
-      }
-
-      if (currentBody) {
-        messages.push(`${headerText}\n${currentBody}`);
-      }
-
-      if (`${headerText}\n${line}`.length > maxMessageLength) {
-        messages.push(`${headerText}\n${line.slice(0, maxMessageLength - headerText.length - 1)}`);
-        currentBody = '';
-        continue;
-      }
-
-      currentBody = line;
-    }
-
-    if (currentBody) {
-      messages.push(`${headerText}\n${currentBody}`);
-    }
-
     setIsSendingToTelegram(true);
     try {
-      for (const text of messages) {
-        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: TELEGRAM_CHAT_ID,
-            text,
-            disable_web_page_preview: true
-          })
-        });
-
-        const payload = await response.json();
-        if (!response.ok || !payload.ok) {
-          throw new Error(payload.description || 'Falha ao enviar mensagem para o Telegram.');
+      const { data, error } = await supabase.functions.invoke('send-selected-questions-telegram', {
+        body: {
+          selectionTarget,
+          questions: selectedQuestions.map((question) => ({
+            id: question.id,
+            author: question.author || '',
+            text: question.text
+          }))
         }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Falha ao enviar para a Edge Function.');
       }
 
-      alert(`Seleção enviada para o Telegram em ${messages.length} mensagem(ns).`);
+      const messageCount = typeof data?.messageCount === 'number' ? data.messageCount : 1;
+      const destinationLabel = getSelectionTargetLabel(selectionTarget);
+      alert(`Seleção (${destinationLabel}) enviada para o Telegram em ${messageCount} mensagem(ns).`);
     } catch (error) {
       console.error(error);
       alert('Não foi possível enviar para o Telegram. Tente novamente.');
