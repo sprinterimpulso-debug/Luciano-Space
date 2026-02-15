@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Question, QuestionStatus } from '../types';
-import { Sparkles, MessageCircle, Clock, CheckCircle2, User, ChevronRight, Star } from 'lucide-react';
+import { Sparkles, MessageCircle, Clock, CheckCircle2, User, ChevronRight, Star, X } from 'lucide-react';
 import { CHECKOUT_URL } from '../constants';
 
 interface QuestionCardProps {
@@ -9,6 +9,7 @@ interface QuestionCardProps {
 
 export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
   const { id, author, text, status, answer, videoUrl } = question;
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
   // Helper to extract YouTube ID
   const getYoutubeId = (url: string) => {
@@ -118,20 +119,50 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
           
           {/* Video Player if ID exists */}
           {videoId && (
-            <div className="mb-4 relative w-full pt-[56.25%] rounded-xl overflow-hidden bg-black shadow-md ring-1 ring-black/10">
-               <iframe 
-                src={`https://www.youtube.com/embed/${videoId}`}
-                title="YouTube video player" 
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                allowFullScreen
-                className="absolute top-0 left-0 w-full h-full border-0"
-              />
-            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsVideoModalOpen(true);
+              }}
+              className="mb-4 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold transition-colors"
+            >
+              Ver resposta em video
+            </button>
           )}
 
           <p className="text-base leading-relaxed text-slate-800 whitespace-pre-line">
             {answer}
           </p>
+        </div>
+      )}
+
+      {isVideoModalOpen && videoId && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setIsVideoModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-4xl bg-black rounded-xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setIsVideoModalOpen(false)}
+              className="absolute top-2 right-2 z-10 bg-black/70 hover:bg-black text-white p-2 rounded-full"
+              aria-label="Fechar video"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="relative w-full pt-[56.25%]">
+              <iframe
+                src={`https://www.youtube.com/embed/${videoId}`}
+                title="Resposta em video"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="absolute top-0 left-0 w-full h-full border-0"
+              />
+            </div>
+          </div>
         </div>
       )}
 

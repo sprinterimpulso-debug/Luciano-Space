@@ -200,7 +200,9 @@ export const AdminPanel: React.FC = () => {
 
       const messageCount = typeof data?.messageCount === 'number' ? data.messageCount : 1;
       const destinationLabel = getSelectionTargetLabel(selectionTarget);
-      alert(`Seleção (${destinationLabel}) enviada para o Telegram em ${messageCount} mensagem(ns).`);
+      const lotCode = typeof data?.lotCode === 'string' ? data.lotCode : '';
+      const lotLabel = lotCode ? ` LOTE_ID: ${lotCode}.` : '';
+      alert(`Seleção (${destinationLabel}) enviada para o Telegram em ${messageCount} mensagem(ns).${lotLabel}`);
     } catch (error) {
       console.error(error);
       alert('Não foi possível enviar para o Telegram. Tente novamente.');
