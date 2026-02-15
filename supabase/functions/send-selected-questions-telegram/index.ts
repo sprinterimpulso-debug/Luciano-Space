@@ -128,9 +128,14 @@ const splitMessages = (headerText: string, lines: string[], maxLength = 3800): s
 const isYoutubeUrl = (text: string): boolean =>
   /https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\//i.test(text);
 
+const normalizeYoutubeUrl = (raw: string): string => {
+  // Remove trailing punctuation commonly added when pasting links in sentences.
+  return raw.trim().replace(/[)\],.;!?]+$/g, '');
+};
+
 const extractFirstYoutubeUrl = (text: string): string | null => {
   const match = text.match(/https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/\S+/i);
-  return match?.[0] || null;
+  return match?.[0] ? normalizeYoutubeUrl(match[0]) : null;
 };
 
 const parseLotIdFromText = (text: string | undefined): string | null => {
@@ -472,7 +477,7 @@ const handleTelegramUpdate = async (
 
   if (vincular) {
     lotCode = vincular[1].toUpperCase();
-    youtubeUrl = vincular[2];
+    youtubeUrl = normalizeYoutubeUrl(vincular[2]);
   } else {
     youtubeUrl = extractFirstYoutubeUrl(text);
     if (!youtubeUrl) {
@@ -526,6 +531,7 @@ const handleTelegramUpdate = async (
     `Lote ${applied.lotCode} vinculado com sucesso.`,
     `Destino: ${getTargetLabel(applied.selectionTarget)}`,
     `Perguntas atualizadas: ${applied.questionCount}`,
+    `Link interpretado: ${youtubeUrl}`,
     `Link: ${youtubeUrl}`,
   ].join('\n');
 
