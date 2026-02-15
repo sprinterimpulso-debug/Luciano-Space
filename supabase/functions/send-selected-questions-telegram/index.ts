@@ -19,10 +19,14 @@ type IncomingPayload = {
   questions: IncomingQuestion[];
 };
 
+type PremiumCheckPayload = {
+  action: 'CHECK_PREMIUM_ACCESS';
+  email: string;
+};
+
 type TelegramMessage = {
   chat?: { id?: number | string };
   text?: string;
-  reply_to_message?: { text?: string };
 };
 
 type TelegramUpdate = {
@@ -56,6 +60,10 @@ type BotRoutingConfig = {
   botToken: string;
   operatorChatIds: string[];
   notifyChatIds: string[];
+  deaBotToken: string;
+  deaGroupChatId: string;
+  deaCarlaChatId: string;
+  platformUrl: string;
 };
 
 const BATCH_BUCKET = 'telegram-bot-batches';
@@ -128,20 +136,11 @@ const splitMessages = (headerText: string, lines: string[], maxLength = 3800): s
 const isYoutubeUrl = (text: string): boolean =>
   /https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\//i.test(text);
 
-const normalizeYoutubeUrl = (raw: string): string => {
-  // Remove trailing punctuation commonly added when pasting links in sentences.
-  return raw.trim().replace(/[)\],.;!?]+$/g, '');
-};
+const normalizeYoutubeUrl = (raw: string): string => raw.trim().replace(/[)\],.;!?]+$/g, '');
 
 const extractFirstYoutubeUrl = (text: string): string | null => {
   const match = text.match(/https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/\S+/i);
   return match?.[0] ? normalizeYoutubeUrl(match[0]) : null;
-};
-
-const parseLotIdFromText = (text: string | undefined): string | null => {
-  if (!text) return null;
-  const match = text.match(/LOTE_ID:\s*([A-Z0-9-]+)/i);
-  return match?.[1]?.toUpperCase() || null;
 };
 
 const generateLotCode = (): string => {
@@ -158,10 +157,15 @@ const getBotRoutingConfig = (): BotRoutingConfig => {
   const operators = parseChatIdList(Deno.env.get('TELEGRAM_OPERATOR_CHAT_IDS'));
   const notifiers = parseChatIdList(Deno.env.get('TELEGRAM_NOTIFY_CHAT_IDS'));
 
-  const operatorChatIds = uniqueList(operators.length > 0 ? operators : (fallbackMainChat ? [fallbackMainChat] : []));
-  const notifyChatIds = uniqueList(notifiers);
-
-  return { botToken, operatorChatIds, notifyChatIds };
+  return {
+    botToken,
+    operatorChatIds: uniqueList(operators.length > 0 ? operators : (fallbackMainChat ? [fallbackMainChat] : [])),
+    notifyChatIds: uniqueList(notifiers),
+    deaBotToken: Deno.env.get('TELEGRAM_DEA_BOT_TOKEN') || '',
+    deaGroupChatId: Deno.env.get('TELEGRAM_DEA_GROUP_CHAT_ID') || '',
+    deaCarlaChatId: Deno.env.get('TELEGRAM_DEA_CARLA_CHAT_ID') || '',
+    platformUrl: Deno.env.get('TELEGRAM_PLATFORM_URL') || 'https://lucianocesa.com.br/space',
+  };
 };
 
 const createAdminClient = () => {
@@ -204,9 +208,7 @@ const ensureBucket = async (supabaseAdmin: ReturnType<typeof createAdminClient>)
       public: false,
       fileSizeLimit: '2MB',
     });
-    if (createError && !createError.message.toLowerCase().includes('already exists')) {
-      throw createError;
-    }
+    if (createError && !createError.message.toLowerCase().includes('already exists')) throw createError;
   }
 
   bucketEnsured = true;
@@ -214,35 +216,24 @@ const ensureBucket = async (supabaseAdmin: ReturnType<typeof createAdminClient>)
 
 const batchPath = (lotCode: string): string => `by-lot/${lotCode.toUpperCase()}.json`;
 
-const saveBatch = async (
-  supabaseAdmin: ReturnType<typeof createAdminClient>,
-  batch: BatchMeta,
-): Promise<void> => {
+const saveBatch = async (supabaseAdmin: ReturnType<typeof createAdminClient>, batch: BatchMeta): Promise<void> => {
   await ensureBucket(supabaseAdmin);
   const payload = new Blob([JSON.stringify(batch)], { type: 'application/json' });
-  const { error } = await supabaseAdmin.storage
-    .from(BATCH_BUCKET)
-    .upload(batchPath(batch.lotCode), payload, {
-      contentType: 'application/json',
-      upsert: true,
-    });
-
+  const { error } = await supabaseAdmin.storage.from(BATCH_BUCKET).upload(batchPath(batch.lotCode), payload, {
+    contentType: 'application/json',
+    upsert: true,
+  });
   if (error) throw error;
 };
 
-const getBatchByLotCode = async (
-  supabaseAdmin: ReturnType<typeof createAdminClient>,
-  lotCode: string,
-): Promise<BatchMeta | null> => {
+const getBatchByLotCode = async (supabaseAdmin: ReturnType<typeof createAdminClient>, lotCode: string): Promise<BatchMeta | null> => {
   await ensureBucket(supabaseAdmin);
   const { data, error } = await supabaseAdmin.storage.from(BATCH_BUCKET).download(batchPath(lotCode));
   if (error || !data) return null;
   return JSON.parse(await data.text()) as BatchMeta;
 };
 
-const listAllBatches = async (
-  supabaseAdmin: ReturnType<typeof createAdminClient>,
-): Promise<BatchMeta[]> => {
+const listAllBatches = async (supabaseAdmin: ReturnType<typeof createAdminClient>): Promise<BatchMeta[]> => {
   await ensureBucket(supabaseAdmin);
   const { data, error } = await supabaseAdmin.storage.from(BATCH_BUCKET).list('by-lot', {
     limit: 1000,
@@ -261,10 +252,7 @@ const listAllBatches = async (
   return batches;
 };
 
-const getLatestBatch = (
-  batches: BatchMeta[],
-  predicate: (batch: BatchMeta) => boolean,
-): BatchMeta | null => {
+const getLatestBatch = (batches: BatchMeta[], predicate: (batch: BatchMeta) => boolean): BatchMeta | null => {
   return batches
     .filter(predicate)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null;
@@ -277,10 +265,12 @@ const applyBatchYoutube = async (
   byChatId: string,
 ): Promise<BatchMeta> => {
   const questionIds = batch.items.map((item) => item.id);
+  const nextStatus = batch.selectionTarget === 'LIVE_GRATUITA' ? 'ANSWERED' : 'PREMIUM';
+
   const { error: updateError } = await supabaseAdmin
     .from('questions')
     .update({
-      status: 'ANSWERED',
+      status: nextStatus,
       video_url: youtubeUrl,
     })
     .in('id', questionIds);
@@ -327,6 +317,32 @@ const undoBatch = async (
   return updated;
 };
 
+const notifyDespertosGroup = async (routing: BotRoutingConfig, youtubeUrl: string): Promise<void> => {
+  if (!routing.deaBotToken) return;
+
+  const groupText = [
+    'Despertos da Era de Aquario ✨',
+    '',
+    'Aqui estao as respostas exclusivas para as perguntas do Luciano Space.',
+    `Video: ${youtubeUrl}`,
+    '',
+    `Se voce ainda nao conhece a plataforma, ou quer deixar sua duvida para ser respondida: ${routing.platformUrl}`,
+  ].join('\n');
+
+  if (routing.deaGroupChatId) {
+    await sendTelegramMessage(routing.deaBotToken, routing.deaGroupChatId, groupText);
+  }
+
+  if (routing.deaCarlaChatId) {
+    const carlaText = [
+      'Aviso para equipe:',
+      'Subir na Kiwify no modulo Perguntas e Respostas - Luciano Space.',
+      `Link do video Despertos: ${youtubeUrl}`,
+    ].join('\n');
+    await sendTelegramMessage(routing.deaBotToken, routing.deaCarlaChatId, carlaText);
+  }
+};
+
 const handleAdminDispatch = async (
   payload: IncomingPayload,
   supabaseAdmin: ReturnType<typeof createAdminClient>,
@@ -354,9 +370,7 @@ const handleAdminDispatch = async (
     .select('id, author, text, status, video_url, answer')
     .in('id', uniqueIds);
 
-  if (dbError) {
-    return jsonResponse(500, { ok: false, error: dbError.message });
-  }
+  if (dbError) return jsonResponse(500, { ok: false, error: dbError.message });
 
   const snapshotMap = new Map((dbQuestions || []).map((q: any) => [q.id, q]));
   const missing = uniqueIds.filter((id) => !snapshotMap.has(id));
@@ -391,7 +405,6 @@ const handleAdminDispatch = async (
 
   const dateLabel = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
   const destinationLabel = getTargetLabel(selectionTarget);
-
   const headerLines = [
     `Data: ${dateLabel}`,
     `Destino: ${destinationLabel}`,
@@ -404,7 +417,9 @@ const handleAdminDispatch = async (
   const lines = batchItems.map((question, index) => normalizeQuestionLine(question, index));
   const messages = splitMessages(headerText, lines);
 
-  const instruction = '\n\nEnvie somente o link do YouTube referente a este lote.';
+  const instruction = selectionTarget === 'LIVE_GRATUITA'
+    ? '\n\nEnvie somente o link do YouTube referente a este lote.'
+    : '\n\nEnvie: /dea <link_do_youtube> referente a este lote.';
 
   for (let i = 0; i < messages.length; i++) {
     const suffix = i === messages.length - 1 ? instruction : '';
@@ -425,7 +440,48 @@ const handleAdminDispatch = async (
   });
 };
 
-const helpText = `Comandos:\n/vincular LOTE_ID <link_youtube>\n/desfazer ultimo\n\nDica: voce tambem pode enviar somente o link do YouTube para aplicar no ultimo lote pendente.`;
+const isValidEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+const checkDespertosAccess = async (payload: PremiumCheckPayload) => {
+  const email = payload.email.trim().toLowerCase();
+  if (!isValidEmail(email)) {
+    return jsonResponse(400, { ok: false, error: 'Email invalido' });
+  }
+
+  const allowAll = (Deno.env.get('DESPERTOS_ALLOW_ALL') || '').toLowerCase() === 'true';
+  if (allowAll) {
+    return jsonResponse(200, { ok: true, allowed: true, source: 'allow_all' });
+  }
+
+  const webhook = Deno.env.get('DESPERTOS_VALIDATION_WEBHOOK_URL') || '';
+  if (webhook) {
+    try {
+      const response = await fetch(webhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      const allowed = Boolean(data?.active);
+      return jsonResponse(200, { ok: true, allowed, source: 'webhook' });
+    } catch {
+      return jsonResponse(200, { ok: true, allowed: false, source: 'webhook_error' });
+    }
+  }
+
+  const allowedEmails = parseChatIdList(Deno.env.get('DESPERTOS_ACTIVE_EMAILS')).map((item) => item.toLowerCase());
+  const allowed = allowedEmails.includes(email);
+  return jsonResponse(200, { ok: true, allowed, source: 'env_list' });
+};
+
+const helpText = [
+  'Comandos disponiveis:',
+  '/live <link_youtube>  -> aplica no ultimo lote pendente de Live Gratuita',
+  '/dea <link_youtube>   -> aplica no ultimo lote pendente de Despertos',
+  '/desfazer ultimo      -> desfaz o ultimo lote aplicado',
+  '',
+  'Dica: mandar somente um link do YouTube aplica no ultimo lote pendente de Live Gratuita.',
+].join('\n');
 
 const handleTelegramUpdate = async (
   update: TelegramUpdate,
@@ -437,13 +493,8 @@ const handleTelegramUpdate = async (
   const chatId = chatIdRaw !== undefined && chatIdRaw !== null ? String(chatIdRaw) : '';
   const text = msg?.text?.trim() || '';
 
-  if (!chatId || !text) {
-    return jsonResponse(200, { ok: true, ignored: true });
-  }
-
-  if (!routing.operatorChatIds.includes(chatId)) {
-    return jsonResponse(200, { ok: true, ignored: true });
-  }
+  if (!chatId || !text) return jsonResponse(200, { ok: true, ignored: true });
+  if (!routing.operatorChatIds.includes(chatId)) return jsonResponse(200, { ok: true, ignored: true });
 
   const allBatches = await listAllBatches(supabaseAdmin);
 
@@ -458,8 +509,7 @@ const handleTelegramUpdate = async (
     }
 
     const reverted = await undoBatch(supabaseAdmin, lastApplied, chatId);
-    const done = `Lote ${reverted.lotCode} desfeito com sucesso.\nPerguntas restauradas: ${reverted.questionCount}.`;
-    await sendTelegramMessage(routing.botToken, chatId, done);
+    await sendTelegramMessage(routing.botToken, chatId, `Lote ${reverted.lotCode} desfeito com sucesso.\nPerguntas restauradas: ${reverted.questionCount}.`);
 
     const notifyTargets = routing.notifyChatIds.filter((id) => id !== chatId);
     if (notifyTargets.length > 0) {
@@ -469,29 +519,30 @@ const handleTelegramUpdate = async (
     return jsonResponse(200, { ok: true, action: 'undo', lotCode: reverted.lotCode });
   }
 
-  const vincular = text.match(/^\/vincular\s+([A-Za-z0-9-]+)\s+(https?:\/\/\S+)/i);
+  const cmdLive = text.match(/^\/live\s+(https?:\/\/\S+)/i);
+  const cmdDea = text.match(/^\/dea\s+(https?:\/\/\S+)/i);
+  const cmdVincular = text.match(/^\/vincular\s+([A-Za-z0-9-]+)\s+(https?:\/\/\S+)/i);
 
-  let lotCode: string | null = null;
   let youtubeUrl: string | null = null;
+  let requestedTarget: SelectionTarget | null = null;
+  let lotCode: string | null = null;
 
-  if (vincular) {
-    lotCode = vincular[1].toUpperCase();
-    youtubeUrl = normalizeYoutubeUrl(vincular[2]);
+  if (cmdLive) {
+    youtubeUrl = normalizeYoutubeUrl(cmdLive[1]);
+    requestedTarget = 'LIVE_GRATUITA';
+  } else if (cmdDea) {
+    youtubeUrl = normalizeYoutubeUrl(cmdDea[1]);
+    requestedTarget = 'DESPERTOS';
+  } else if (cmdVincular) {
+    lotCode = cmdVincular[1].toUpperCase();
+    youtubeUrl = normalizeYoutubeUrl(cmdVincular[2]);
   } else {
     youtubeUrl = extractFirstYoutubeUrl(text);
-    if (!youtubeUrl) {
-      await sendTelegramMessage(routing.botToken, chatId, `Comando nao reconhecido.\n\n${helpText}`);
-      return jsonResponse(200, { ok: true, ignored: true });
-    }
-
-    const replyLot = parseLotIdFromText(msg?.reply_to_message?.text);
-    if (replyLot) {
-      lotCode = replyLot;
-    }
+    requestedTarget = 'LIVE_GRATUITA';
   }
 
   if (!youtubeUrl || !isYoutubeUrl(youtubeUrl)) {
-    await sendTelegramMessage(routing.botToken, chatId, 'Link invalido. Envie um link do YouTube valido.');
+    await sendTelegramMessage(routing.botToken, chatId, `Nao consegui identificar um link valido do YouTube.\n\n${helpText}`);
     return jsonResponse(200, { ok: true, ignored: true });
   }
 
@@ -503,73 +554,68 @@ const handleTelegramUpdate = async (
       await sendTelegramMessage(routing.botToken, chatId, `Nao encontrei o lote ${lotCode}.`);
       return jsonResponse(200, { ok: true, ignored: true });
     }
-  } else {
+  } else if (requestedTarget) {
     targetBatch = getLatestBatch(
       allBatches,
-      (batch) => batch.status === 'PENDING' && batch.selectionTarget === 'LIVE_GRATUITA',
+      (batch) => batch.status === 'PENDING' && batch.selectionTarget === requestedTarget,
     );
 
     if (!targetBatch) {
-      await sendTelegramMessage(routing.botToken, chatId, 'Nenhum lote pendente de Live Gratuita encontrado.');
+      await sendTelegramMessage(routing.botToken, chatId, `Nenhum lote pendente de ${getTargetLabel(requestedTarget)} encontrado.`);
       return jsonResponse(200, { ok: true, ignored: true });
     }
   }
 
+  if (!targetBatch) {
+    await sendTelegramMessage(routing.botToken, chatId, helpText);
+    return jsonResponse(200, { ok: true, ignored: true });
+  }
+
   if (targetBatch.status !== 'PENDING') {
-    await sendTelegramMessage(
-      routing.botToken,
-      chatId,
-      `O lote ${targetBatch.lotCode} esta com status ${targetBatch.status}. Use /desfazer ultimo ou outro lote.`,
-    );
+    await sendTelegramMessage(routing.botToken, chatId, `O lote ${targetBatch.lotCode} esta com status ${targetBatch.status}.`);
     return jsonResponse(200, { ok: true, ignored: true });
   }
 
   const applied = await applyBatchYoutube(supabaseAdmin, targetBatch, youtubeUrl, chatId);
 
   const success = [
-    `Lote ${applied.lotCode} vinculado com sucesso.`,
-    `Destino: ${getTargetLabel(applied.selectionTarget)}`,
+    `${getTargetLabel(applied.selectionTarget)} aplicado com sucesso.`,
     `Perguntas atualizadas: ${applied.questionCount}`,
     `Link interpretado: ${youtubeUrl}`,
-    `Link: ${youtubeUrl}`,
   ].join('\n');
 
   await sendTelegramMessage(routing.botToken, chatId, success);
 
   const notifyTargets = routing.notifyChatIds.filter((id) => id !== chatId);
   if (notifyTargets.length > 0) {
-    const notice = `[AVISO] Lote aplicado\nLOTE_ID: ${applied.lotCode}\nPor: ${chatId}\nLink: ${youtubeUrl}`;
+    const notice = `[AVISO] Lote aplicado\nLOTE_ID: ${applied.lotCode}\nDestino: ${getTargetLabel(applied.selectionTarget)}\nPor: ${chatId}\nLink: ${youtubeUrl}`;
     await broadcastTelegramMessage(routing.botToken, notifyTargets, notice);
   }
 
-  return jsonResponse(200, {
-    ok: true,
-    action: 'apply',
-    lotCode: applied.lotCode,
-  });
+  if (applied.selectionTarget === 'DESPERTOS') {
+    await notifyDespertosGroup(routing, youtubeUrl);
+  }
+
+  return jsonResponse(200, { ok: true, action: 'apply', lotCode: applied.lotCode });
 };
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  if (req.method !== 'POST') {
-    return jsonResponse(405, { ok: false, error: 'Method not allowed' });
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method !== 'POST') return jsonResponse(405, { ok: false, error: 'Method not allowed' });
 
   const routing = getBotRoutingConfig();
   if (!routing.botToken || routing.operatorChatIds.length === 0) {
-    return jsonResponse(500, {
-      ok: false,
-      error: 'Missing TELEGRAM_BOT_TOKEN and/or operator chat ids',
-    });
+    return jsonResponse(500, { ok: false, error: 'Missing TELEGRAM_BOT_TOKEN and/or operator chat ids' });
   }
 
   const supabaseAdmin = createAdminClient();
 
   try {
     const body = await req.json();
+
+    if (body?.action === 'CHECK_PREMIUM_ACCESS') {
+      return await checkDespertosAccess(body as PremiumCheckPayload);
+    }
 
     if (body?.message?.chat?.id) {
       return await handleTelegramUpdate(body as TelegramUpdate, supabaseAdmin, routing);
