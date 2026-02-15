@@ -418,8 +418,8 @@ const handleAdminDispatch = async (
   const messages = splitMessages(headerText, lines);
 
   const instruction = selectionTarget === 'LIVE_GRATUITA'
-    ? '\n\nEnvie somente o link do YouTube referente a este lote.'
-    : '\n\nEnvie: /dea <link_do_youtube> referente a este lote.';
+    ? '\n\nEnvie: /live <e o link do youtube referente às respostas deste lote>'
+    : '\n\nEnvie: /dea <e o link do youtube no modo não-listado referente às respostas deste lote>';
 
   for (let i = 0; i < messages.length; i++) {
     const suffix = i === messages.length - 1 ? instruction : '';
