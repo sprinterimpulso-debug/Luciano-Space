@@ -89,7 +89,7 @@ const parseChatIdList = (raw: string | undefined | null): string[] => {
 const uniqueList = (items: string[]): string[] => Array.from(new Set(items));
 
 const getTargetLabel = (target: SelectionTarget): string =>
-  target === 'LIVE_GRATUITA' ? 'Live Gratuita' : 'Despertos';
+  target === 'LIVE_GRATUITA' ? 'Conteúdo Gratuito' : 'Despertos';
 
 const normalizeQuestionLine = (question: { id: number; author?: string; text: string }, index: number): string => {
   const author = question.author?.trim() || 'Anônimo';
@@ -418,7 +418,7 @@ const handleAdminDispatch = async (
   const messages = splitMessages(headerText, lines);
 
   const instruction = selectionTarget === 'LIVE_GRATUITA'
-    ? '\n\nEnvie: /live <e o link do youtube referente às respostas deste lote>'
+    ? '\n\nEnvie: /publico <e o link do youtube referente às respostas deste lote>'
     : '\n\nEnvie: /dea <e o link do youtube no modo não-listado referente às respostas deste lote>';
 
   for (let i = 0; i < messages.length; i++) {
@@ -476,11 +476,11 @@ const checkDespertosAccess = async (payload: PremiumCheckPayload) => {
 
 const helpText = [
   'Comandos disponiveis:',
-  '/live <link_youtube>  -> aplica no ultimo lote pendente de Live Gratuita',
+  '/publico <link_youtube> -> aplica no ultimo lote pendente de Conteúdo Gratuito',
   '/dea <link_youtube>   -> aplica no ultimo lote pendente de Despertos',
   '/desfazer ultimo      -> desfaz o ultimo lote aplicado',
   '',
-  'Dica: mandar somente um link do YouTube aplica no ultimo lote pendente de Live Gratuita.',
+  'Dica: mandar somente um link do YouTube aplica no ultimo lote pendente de Conteúdo Gratuito.',
 ].join('\n');
 
 const handleTelegramUpdate = async (
@@ -519,6 +519,7 @@ const handleTelegramUpdate = async (
     return jsonResponse(200, { ok: true, action: 'undo', lotCode: reverted.lotCode });
   }
 
+  const cmdPublico = text.match(/^\/publico\s+(https?:\/\/\S+)/i);
   const cmdLive = text.match(/^\/live\s+(https?:\/\/\S+)/i);
   const cmdDea = text.match(/^\/dea\s+(https?:\/\/\S+)/i);
   const cmdVincular = text.match(/^\/vincular\s+([A-Za-z0-9-]+)\s+(https?:\/\/\S+)/i);
@@ -527,7 +528,11 @@ const handleTelegramUpdate = async (
   let requestedTarget: SelectionTarget | null = null;
   let lotCode: string | null = null;
 
-  if (cmdLive) {
+  if (cmdPublico) {
+    youtubeUrl = normalizeYoutubeUrl(cmdPublico[1]);
+    requestedTarget = 'LIVE_GRATUITA';
+  } else if (cmdLive) {
+    // Backward compatibility for operators already acostumados com /live.
     youtubeUrl = normalizeYoutubeUrl(cmdLive[1]);
     requestedTarget = 'LIVE_GRATUITA';
   } else if (cmdDea) {

@@ -10,7 +10,7 @@ const SELECTION_TARGET_KEY = 'admin_selection_target';
 type SelectionTarget = 'LIVE_GRATUITA' | 'DESPERTOS';
 
 const getSelectionTargetLabel = (target: SelectionTarget): string =>
-  target === 'LIVE_GRATUITA' ? 'Live Gratuita' : 'Despertos';
+  target === 'LIVE_GRATUITA' ? 'Conteúdo Gratuito' : 'Despertos';
 
 export const AdminPanel: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -423,7 +423,7 @@ export const AdminPanel: React.FC = () => {
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                Live Gratuita
+                Conteúdo Gratuito
               </button>
               <button
                 onClick={() => setSelectionTarget('DESPERTOS')}
