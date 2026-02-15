@@ -5,7 +5,6 @@ import {
   Loader2, LogOut, Trash2, Save, CheckCircle2, Lock, Clock, PlayCircle, Sparkles, Filter, Send
 } from 'lucide-react';
 
-const SELECTED_QUESTIONS_KEY = 'admin_selected_questions';
 const SELECTION_TARGET_KEY = 'admin_selection_target';
 
 type SelectionTarget = 'LIVE_GRATUITA' | 'DESPERTOS';
@@ -32,23 +31,6 @@ export const AdminPanel: React.FC = () => {
   useEffect(() => {
     fetchQuestions();
   }, []);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(SELECTED_QUESTIONS_KEY);
-      if (!stored) return;
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) {
-        setSelectedIds(parsed.filter((id): id is number => Number.isInteger(id)));
-      }
-    } catch (error) {
-      console.error('Erro ao carregar seleção local:', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(SELECTED_QUESTIONS_KEY, JSON.stringify(selectedIds));
-  }, [selectedIds]);
 
   useEffect(() => {
     try {
