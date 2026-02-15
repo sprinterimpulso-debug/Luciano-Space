@@ -620,7 +620,8 @@ const helpText = [
   'Comandos disponiveis:',
   '/publico <link_youtube> -> aplica no ultimo lote pendente de Conteúdo Gratuito',
   '/dea <link_youtube>   -> aplica no ultimo lote pendente de Despertos',
-  '/desfazer ultimo      -> desfaz o ultimo lote aplicado',
+  '/desfazer ultimo publico -> desfaz o ultimo lote aplicado de Conteúdo Gratuito',
+  '/desfazer ultimo dea     -> desfaz o ultimo lote aplicado de Despertos',
   '',
   'Dica: mandar somente um link do YouTube aplica no ultimo lote pendente de Conteúdo Gratuito.',
 ].join('\n');
@@ -647,22 +648,48 @@ const handleTelegramUpdate = async (
 
   const allBatches = await listAllBatches(supabaseAdmin);
 
-  if (/^\/desfazer\s+ultimo$/i.test(text)) {
+  const undoLegacyCmd = /^\/desfazer\s+ultimo$/i.test(text);
+  const undoScopedCmd = text.match(/^\/desfazer\s+ultimo\s+(dea|publico|live)$/i);
+
+  if (undoLegacyCmd) {
+    await sendTelegramMessage(
+      routing.botToken,
+      chatId,
+      'Agora o desfazer exige destino.\nUse:\n/desfazer ultimo publico\n/desfazer ultimo dea',
+    );
+    return jsonResponse(200, { ok: true, ignored: true });
+  }
+
+  if (undoScopedCmd) {
+    const scope = undoScopedCmd[1].toLowerCase();
+    const undoTarget: SelectionTarget = scope === 'dea' ? 'DESPERTOS' : 'LIVE_GRATUITA';
     const lastApplied = allBatches
-      .filter((batch) => batch.status === 'APPLIED')
+      .filter((batch) => batch.status === 'APPLIED' && batch.selectionTarget === undoTarget)
       .sort((a, b) => new Date(b.appliedAt || b.createdAt).getTime() - new Date(a.appliedAt || a.createdAt).getTime())[0];
 
     if (!lastApplied) {
-      await sendTelegramMessage(routing.botToken, chatId, 'Nenhum lote aplicado encontrado para desfazer.');
+      await sendTelegramMessage(
+        routing.botToken,
+        chatId,
+        `Nenhum lote aplicado de ${getTargetLabel(undoTarget)} encontrado para desfazer.`,
+      );
       return jsonResponse(200, { ok: true });
     }
 
     const reverted = await undoBatch(supabaseAdmin, lastApplied, chatId);
-    await sendTelegramMessage(routing.botToken, chatId, `Lote ${reverted.lotCode} desfeito com sucesso.\nPerguntas restauradas: ${reverted.questionCount}.`);
+    await sendTelegramMessage(
+      routing.botToken,
+      chatId,
+      `Lote ${reverted.lotCode} (${getTargetLabel(undoTarget)}) desfeito com sucesso.\nPerguntas restauradas: ${reverted.questionCount}.`,
+    );
 
     const notifyTargets = routing.notifyChatIds.filter((id) => id !== chatId);
     if (notifyTargets.length > 0) {
-      await broadcastTelegramMessage(routing.botToken, notifyTargets, `[AVISO] /desfazer ultimo executado\nLOTE_ID: ${reverted.lotCode}\nPor: ${chatId}`);
+      await broadcastTelegramMessage(
+        routing.botToken,
+        notifyTargets,
+        `[AVISO] /desfazer ultimo ${scope} executado\nLOTE_ID: ${reverted.lotCode}\nDestino: ${getTargetLabel(undoTarget)}\nPor: ${chatId}`,
+      );
     }
 
     return jsonResponse(200, { ok: true, action: 'undo', lotCode: reverted.lotCode });
