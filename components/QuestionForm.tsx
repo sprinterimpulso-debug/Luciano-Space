@@ -62,7 +62,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({ nextId, onSubmit, is
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-indigo-100 shadow-[0_-4px_30px_rgba(0,0,0,0.1)] z-50">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-indigo-100 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] z-50">
       <div className="max-w-3xl mx-auto px-4 py-3 pb-6 sm:pb-4">
         
         {/* Header do Form */}

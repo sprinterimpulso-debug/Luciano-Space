@@ -170,23 +170,20 @@ export default function App() {
   // --- USER APP ---
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
-      {/* Hero Header - Era de Aquário Theme Enhanced */}
-      <header className="relative bg-[#1a0b2e] pb-24 pt-12 rounded-b-[3rem] shadow-2xl overflow-hidden z-10">
+      {/* Hero Header - versão otimizada para scroll fluido */}
+      <header className="relative bg-[#1a0b2e] pb-20 pt-12 rounded-b-[2.5rem] shadow-xl overflow-hidden z-10">
         
-        {/* Animated Background Layers */}
+        {/* Background Layers */}
         <div className="absolute inset-0 w-full h-full">
-           {/* Deep Space Base */}
-           <div className="absolute inset-0 bg-gradient-to-b from-indigo-950 via-purple-950 to-indigo-900 opacity-90"></div>
+           <div className="absolute inset-0 bg-gradient-to-b from-indigo-950 via-purple-950 to-indigo-900 opacity-95"></div>
            
-           {/* Pattern Overlay */}
            <div className="absolute inset-0 bg-grid-white opacity-10"></div>
 
-           {/* Animated Blobs (Nebula Effect) */}
-           <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
-           <div className="absolute top-0 -right-4 w-72 h-72 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
-           <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+           {/* Glows estáticos (sem animação/blur pesado) */}
+           <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-fuchsia-500/20"></div>
+           <div className="absolute -top-20 -right-24 w-80 h-80 rounded-full bg-indigo-400/20"></div>
+           <div className="absolute -bottom-24 left-24 w-80 h-80 rounded-full bg-amber-400/15"></div>
            
-           {/* Stars/Dust particles (Static for performance, but look active) */}
            <div className="absolute inset-0" style={{backgroundImage: 'radial-gradient(rgba(255,255,255,0.15) 1px, transparent 1px)', backgroundSize: '40px 40px'}}></div>
         </div>
 
@@ -194,11 +191,10 @@ export default function App() {
           <div className="flex flex-col sm:flex-row items-start justify-between gap-6">
             
             <div className="flex flex-col gap-3">
-              {/* Ethereal Title */}
               <div className="relative">
-                <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg blur opacity-25"></div>
-                <h1 className="relative text-4xl sm:text-5xl font-black text-white leading-tight tracking-tight drop-shadow-lg">
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-200 via-indigo-100 to-amber-100 animate-pulse">
+                <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg opacity-25"></div>
+                <h1 className="relative text-4xl sm:text-5xl font-black text-white leading-tight tracking-tight">
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-200 via-indigo-100 to-amber-100">
                     Luciano Space
                   </span>
                 </h1>
@@ -210,10 +206,9 @@ export default function App() {
               </p>
             </div>
             
-            {/* Glassmorphism Counter Badge */}
+            {/* Counter Badge */}
             <div className="w-full sm:w-auto mt-4 sm:mt-0">
-               <div className="bg-white/5 backdrop-blur-xl border border-white/20 p-4 rounded-2xl shadow-lg relative overflow-hidden group">
-                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+               <div className="bg-white/10 border border-white/20 p-4 rounded-2xl shadow-lg relative overflow-hidden">
                   <div className="relative flex items-center justify-between sm:block gap-4">
                     <div>
                       <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest mb-1 flex items-center gap-1">
