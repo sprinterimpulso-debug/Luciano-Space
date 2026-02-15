@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Question, QuestionStatus } from '../types';
 import { Sparkles, MessageCircle, Clock, CheckCircle2, User, ChevronRight, Star, X, Mail } from 'lucide-react';
 import { CHECKOUT_URL } from '../constants';
@@ -197,74 +198,82 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question }) => {
         </div>
       )}
 
-      {isVideoModalOpen && videoId && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setIsVideoModalOpen(false)}>
-          <div className="relative w-full max-w-4xl bg-black rounded-xl overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => setIsVideoModalOpen(false)}
-              className="absolute top-2 right-2 z-10 bg-black/70 hover:bg-black text-white p-2 rounded-full"
-              aria-label="Fechar video"
-            >
-              <X className="w-5 h-5" />
-            </button>
+      {typeof document !== 'undefined' && isVideoModalOpen && videoId &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] bg-black/75 p-3 sm:p-6 overflow-y-auto" onClick={() => setIsVideoModalOpen(false)}>
+            <div className="min-h-full flex items-start sm:items-center justify-center">
+              <div className="relative w-full max-w-5xl bg-black rounded-xl overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => setIsVideoModalOpen(false)}
+                  className="absolute top-2 right-2 z-10 bg-black/70 hover:bg-black text-white p-2 rounded-full"
+                  aria-label="Fechar video"
+                >
+                  <X className="w-5 h-5" />
+                </button>
 
-            <div className="relative w-full pt-[56.25%]">
-              <iframe
-                src={`https://www.youtube.com/embed/${videoId}`}
-                title="Resposta em video"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="absolute top-0 left-0 w-full h-full border-0"
-              />
+                <div className="aspect-video w-full bg-black">
+                  <iframe
+                    src={`https://www.youtube.com/embed/${videoId}`}
+                    title="Resposta em video"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="w-full h-full border-0"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
-      {isPremiumAccessModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setIsPremiumAccessModalOpen(false)}>
-          <div className="w-full max-w-md bg-white rounded-xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-lg font-bold text-slate-900">Validar acesso Despertos</h4>
-              <button onClick={() => setIsPremiumAccessModalOpen(false)} className="text-slate-500 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
+      {typeof document !== 'undefined' && isPremiumAccessModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] bg-black/60 p-4 overflow-y-auto" onClick={() => setIsPremiumAccessModalOpen(false)}>
+            <div className="min-h-full flex items-center justify-center">
+              <div className="w-full max-w-md bg-white rounded-xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-lg font-bold text-slate-900">Validar acesso Despertos</h4>
+                  <button onClick={() => setIsPremiumAccessModalOpen(false)} className="text-slate-500 hover:text-slate-700">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <p className="text-sm text-slate-600 mb-3">Digite seu e-mail de assinatura para liberar este video.</p>
+
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">E-mail</label>
+                <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 mb-3">
+                  <Mail className="w-4 h-4 text-slate-400" />
+                  <input
+                    type="email"
+                    value={premiumEmail}
+                    onChange={(e) => setPremiumEmail(e.target.value)}
+                    placeholder="voce@email.com"
+                    className="w-full outline-none text-slate-900"
+                  />
+                </div>
+
+                {premiumAccessError && <p className="text-xs text-red-600 mb-3">{premiumAccessError}</p>}
+
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => setIsPremiumAccessModalOpen(false)}
+                    className="px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-bold text-sm"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={requestPremiumAccess}
+                    disabled={isCheckingPremiumAccess}
+                    className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-70 text-white font-bold text-sm"
+                  >
+                    {isCheckingPremiumAccess ? 'Validando...' : 'Liberar acesso'}
+                  </button>
+                </div>
+              </div>
             </div>
-
-            <p className="text-sm text-slate-600 mb-3">Digite seu e-mail de assinatura para liberar este video.</p>
-
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">E-mail</label>
-            <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 mb-3">
-              <Mail className="w-4 h-4 text-slate-400" />
-              <input
-                type="email"
-                value={premiumEmail}
-                onChange={(e) => setPremiumEmail(e.target.value)}
-                placeholder="voce@email.com"
-                className="w-full outline-none text-slate-900"
-              />
-            </div>
-
-            {premiumAccessError && <p className="text-xs text-red-600 mb-3">{premiumAccessError}</p>}
-
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setIsPremiumAccessModalOpen(false)}
-                className="px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-bold text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={requestPremiumAccess}
-                disabled={isCheckingPremiumAccess}
-                className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-70 text-white font-bold text-sm"
-              >
-                {isCheckingPremiumAccess ? 'Validando...' : 'Liberar acesso'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };

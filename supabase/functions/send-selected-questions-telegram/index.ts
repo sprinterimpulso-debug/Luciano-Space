@@ -581,7 +581,7 @@ const handleTelegramUpdate = async (
   const success = [
     `${getTargetLabel(applied.selectionTarget)} aplicado com sucesso.`,
     `Perguntas atualizadas: ${applied.questionCount}`,
-    `Link interpretado: ${youtubeUrl}`,
+    `Link das respostas: ${youtubeUrl}`,
   ].join('\n');
 
   await sendTelegramMessage(routing.botToken, chatId, success);
