@@ -37,3 +37,16 @@ Para manter o token do bot fora do frontend, o envio de perguntas selecionadas n
    `supabase functions deploy send-selected-questions-telegram`
 
 Depois disso, o botao de envio no `#admin` chama essa funcao e dispara para o Telegram.
+
+## Migracao de propriedade (Vercel + Supabase proprio)
+
+1. Criar um novo projeto Supabase na sua conta.
+2. Rodar o SQL/schema da tabela `questions` no novo projeto.
+3. Importar backup local:
+   `SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/import-questions.mjs`
+4. Ajustar `.env.local` com o novo `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
+5. Publicar o frontend no Vercel (novo link) e atualizar seu redirect `lucianocesa.com.br/space`.
+
+O arquivo de backup fica em:
+- `backups/questions-backup-*.json`
+- `backups/questions-backup-*.csv`
